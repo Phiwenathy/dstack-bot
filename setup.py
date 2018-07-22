@@ -24,7 +24,7 @@ setup(
     # the version across setup.py and the project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
     # version=version_string,
-    version='1.0.1',
+    version='1.0.2',
 
     description=(
         'Simple bot that allows you to run commands on your server using invoke'),
@@ -84,6 +84,7 @@ setup(
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=[
         'invoke',
+        'psutil',
         'python-dotenv',
         'python-telegram-bot',
     ],
