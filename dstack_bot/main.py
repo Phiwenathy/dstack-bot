@@ -16,7 +16,8 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger('dstack_cubed')
 
 token = os.getenv('TELEGRAM_BOT_TOKEN')
-only_me = Filters.user(username=os.getenv('TELEGRAM_BOT_ADMIN'))
+admin1 = Filters.user(username=os.getenv('TELEGRAM_BOT_ADMIN1'))
+admin2 = Filters.user(username=os.getenv('TELEGRAM_BOT_ADMIN2'))
 
 
 # Define a few command handlers. These usually take the two arguments bot and
@@ -48,10 +49,10 @@ def main():
     # Get the dispatcher to register handlers
     dp = updater.dispatcher
     # on different commands - answer in Telegram
-    dp.add_handler(CommandHandler("start", start, filters=only_me))
-    dp.add_handler(CommandHandler("stats", stats, filters=only_me))
+    dp.add_handler(CommandHandler("start", start, filters=admin1 | admin2))
+    dp.add_handler(CommandHandler("stats", stats, filters=admin1 | admin2))
     # on non-command i.e message - echo the message on Telegram
-    dp.add_handler(MessageHandler(Filters.text & only_me, invoke))
+    dp.add_handler(MessageHandler(Filters.text & (admin1 | admin2), invoke))
     # log all errors
     dp.add_error_handler(error)
     # Start the Bot
