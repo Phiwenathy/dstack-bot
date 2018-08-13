@@ -28,6 +28,7 @@ def start(bot, update):
     update.message.reply_text("""
     Available commands:
     /start - shows this help
+    /status - checks the status of the toolset service
     /stats - shows server stats
     /restart - asks which service to restart
     """)
@@ -36,6 +37,12 @@ def start(bot, update):
 def invoke(bot, update):
     """Run message as invoke task"""
     result = run(update.message.text, hide=True, warn=True, pty=False)
+    update.message.reply_markdown(f'```bash\n{result.stdout or "No output."}\n```')
+
+
+def status(bot, update):
+    """Run message as invoke task"""
+    result = run("docker ps --format 'table {{.Names}}\t{{.Status}}'", hide=True, warn=True, pty=False)
     update.message.reply_markdown(f'```bash\n{result.stdout or "No output."}\n```')
 
 
@@ -86,10 +93,13 @@ def main():
     dp = updater.dispatcher
     # on different commands - answer in Telegram
     dp.add_handler(CommandHandler("start", start, filters=admin1 | admin2))
+    dp.add_handler(CommandHandler("help", start, filters=admin1 | admin2))
+    dp.add_handler(CommandHandler("status", status, filters=admin1 | admin2))
     dp.add_handler(CommandHandler("stats", stats, filters=admin1 | admin2))
     dp.add_handler(CommandHandler("restart", restart, filters=admin1 | admin2))
     # on non-command i.e message - echo the message on Telegram
     dp.add_handler(MessageHandler(Filters.text & (admin1 | admin2), invoke))
+    # TODO: Make sure this is secure
     dp.add_handler(CallbackQueryHandler(restart_service))
     # log all errors
     dp.add_error_handler(error)
