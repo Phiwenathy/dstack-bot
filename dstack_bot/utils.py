@@ -1,7 +1,10 @@
 import operator
+import os
 from datetime import datetime
 
 import psutil
+
+from .exceptions import NotConfigured
 
 
 def stats_summary():
@@ -33,3 +36,16 @@ def stats_summary():
         pids_reply += process[0] + " " + ("%.2f" % process[1]) + " %\n"
 
     return '\n'.join([time_diff, memory_total, memory_available, memory_used_percentage, disk_used, pids_reply])
+
+
+def create_env_file(envs):
+    with open('.env-example') as env_file:
+        env_file.writelines([f'{env}=\n' for env in envs])
+
+
+def get_env(env_name, default=None):
+    env_value = os.getenv(env_name, None)
+    if env_value is None and default is None:
+        raise NotConfigured(f'{env_name} has not been defined in your .env file.')
+    else:
+        return env_value or default
