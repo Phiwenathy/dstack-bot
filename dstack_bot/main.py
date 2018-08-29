@@ -136,6 +136,7 @@ def show_backups(bot, update):
             if match:
                 data = match.groupdict()
                 backups.append(f"{data['date']} - {data['tag']}")
+        backups.reverse()
         message = '\n'.join(backups[:5])
         return message
 
