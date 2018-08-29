@@ -117,7 +117,7 @@ def users(bot, update):
 def backup(bot, update):
     """Run message as invoke task"""
     tag = get_env('S3_BACKUP_TAG') or update.message.text[7:]
-    run_and_reply(update, f'dstack e db backup --tag {tag}_daily')
+    run_and_reply(update, f'dstack e db backup --tag {tag}')
     cleanup('*.tar.gz')
 
 
@@ -136,7 +136,7 @@ def show_backups(bot, update):
             if match:
                 data = match.groupdict()
                 backups.append(f"{data['date']} - {data['tag']}")
-        message = '\n'.join(backups[:-5])
+        message = '\n'.join(backups[:5])
         return message
 
     run_and_reply(update, f'aws s3 ls s3://{bucket}{backup_path}', process_func=_process)
