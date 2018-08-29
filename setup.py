@@ -24,7 +24,7 @@ setup(
     # the version across setup.py and the project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
     # version=version_string,
-    version='1.1.0',
+    version='1.1.2',
 
     description=(
         'Simple bot that allows you to run commands on your server using invoke'),

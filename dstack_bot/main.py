@@ -6,10 +6,11 @@ import re
 import dotenv
 from invoke import run
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, TelegramError
-from telegram.ext import CommandHandler, Filters, MessageHandler, Updater, CallbackQueryHandler
+from telegram.ext import CallbackQueryHandler, CommandHandler, Filters, Updater
 
+from dstack_bot.tasks import cleanup
 from .exceptions import NotConfigured
-from .utils import stats_summary, get_env
+from .utils import get_env, stats_summary
 
 dotenv.load_dotenv(dotenv.find_dotenv())
 
@@ -24,6 +25,7 @@ envs = [
     'S3_BUCKET_NAME',
     'S3_BACKUP_PATH',
     'S3_BACKUP_TAG',
+    'LOCAL_BACKUP_PATH',
     'POSTGRES_CONTAINER_NAME',
     'POSTGRES_USERNAME',
 ]
@@ -36,33 +38,54 @@ except NotConfigured as e:
     raise TelegramError(str(e))
 
 
+def run_and_reply(update, command, reply=True, process_func=None):
+    """Initial implementation of message response that support paging if message is too long
+
+    """
+    result = run(command, hide=True, warn=True, pty=False)
+    if process_func and result.stdout:
+        message = process_func(result.stdout)
+        if not reply:
+            return message
+    else:
+        message = result.stdout or result.stderr or "No output."
+    if len(message) < 4096:  # max Telegram message length
+        update.message.reply_markdown(f'```bash\n{message}\n```')
+    else:
+        max_length = 4096
+        message_parts = [message[i:i + max_length] for i in range(0, len(message), max_length)]
+        # restrict to only two messages and truncate rest to prevent flooding Telegram
+        for message in message_parts[:2]:
+            update.message.reply_markdown(f'```bash\n{message}\n```')
+        if len(message_parts) > 2:
+            update.message.reply_markdown(f'```bash\n...message truncated...\n```')
+
+
 # Define a few command handlers. These usually take the two arguments bot and
 # update. Error handlers also receive the raised TelegramError object in error.
 def start(bot, update):
     """Send a message when the command /start is issued."""
     update.message.reply_text("""
     Available commands:
-    /start - shows this help
-    /status - checks the status of the toolset service
-    /stats - shows server stats
-    /restart - asks which service to restart
-    /users - download csv of the current users
-    /backup - create backup and upload to s3 bucket
-    /show_backups - Show list of most recent backups
-    /shell - run arbitrary commands using dstack/invoke on the server.
+    /start        - shows this help
+    /status       - checks the status of the toolset service
+    /stats        - shows server stats
+    /restart      - interactively restart docker services running on host
+    /users        - download csv of the current users
+    /backup       - create backup and upload to s3 bucket
+    /show_backups - show list of most recent backups
+    /shell        - run arbitrary commands using dstack/invoke on the server.
     """)
 
 
 def invoke(bot, update):
     """Run message as invoke task"""
-    result = run(update.message.text[7:], hide=True, warn=True, pty=False)
-    update.message.reply_markdown(f'```bash\n{result.stdout or result.stderr or "No output."}\n```')
+    run_and_reply(update, update.message.text[7:])
 
 
 def status(bot, update):
     """Run message as invoke task"""
-    result = run("docker ps --format 'table {{.Names}}\t{{.Status}}'", hide=True, warn=True, pty=False)
-    update.message.reply_markdown(f'```bash\n{result.stdout or result.stderr or "No output."}\n```')
+    run_and_reply(update, "docker ps --format 'table {{.Names}}\t{{.Status}}'")
 
 
 def error(bot, update, error_name):
@@ -93,51 +116,42 @@ def users(bot, update):
 
 def backup(bot, update):
     """Run message as invoke task"""
-    tag = 'gauseng' or update.message.text[7:]
-    result = run(f'dstack e db backup --tag {tag}', hide=True, warn=True, pty=False)
-    update.message.reply_markdown(f'```bash\n{result.stdout or result.stderr or "No output."}\n```')
+    tag = get_env('S3_BACKUP_TAG') or update.message.text[7:]
+    run_and_reply(update, f'dstack e db backup --tag {tag}_daily')
+    cleanup('*.tar.gz')
 
 
 def show_backups(bot, update):
     try:
         bucket = get_env('S3_BUCKET_NAME')
         backup_path = get_env('S3_BACKUP_PATH')
-        backup_tag = get_env('S3_BACKUP_TAG', '')
-    except NotConfigured as e:
-        raise TelegramError(str(e))
+    except NotConfigured as exception:
+        raise TelegramError(str(exception))
 
-    tag = update.message.text[14:] or backup_tag
-    backups = []
-    result = run(f'aws s3 ls s3://{bucket}{backup_path}', hide=True, warn=True, pty=False)
-    aws_ls = result.stdout.split('\n')
-    for entry in aws_ls[:-1]:
-        match = re.match('.+db_backup\.(?P<date>[\dT-]{19}Z)_(?P<tag>.+)\.tar\.gz$', entry)
-        if match:
-            data = match.groupdict()
-            if tag:
-                # filter on tag
-                if tag == data['tag']:
-                    backups.append(f"{data['date']} - {data['tag']}")
-            else:
-                # List all backups
+    def _process(stdout):
+        backups = []
+        aws_ls = stdout.split('\n')
+        for entry in aws_ls[:-1]:
+            match = re.match('.+db_backup\.(?P<date>[\dT-]{19}Z)_(?P<tag>.+)\.tar\.gz$', entry)
+            if match:
+                data = match.groupdict()
                 backups.append(f"{data['date']} - {data['tag']}")
+        message = '\n'.join(backups[:-5])
+        return message
 
-    backups_print = '\n'.join(backups)
-    update.message.reply_markdown(f"```bash\n{backups_print}\n```")
+    run_and_reply(update, f'aws s3 ls s3://{bucket}{backup_path}', process_func=_process)
 
 
 def restart(bot, update):
-    # TODO: Populate the options dynamically from docker ps output
-    keyboard = [
-        [
-            InlineKeyboardButton("Django", callback_data='django'),
-            InlineKeyboardButton("Superset", callback_data='superset'),
-        ],
-        [
-            InlineKeyboardButton("Nginx", callback_data='nginx'),
-            InlineKeyboardButton("Redis", callback_data='redis'),
-        ]
-    ]
+    services = run_and_reply(update, "docker ps --format '{{.Names}}'",
+                             reply=False, process_func=lambda s: s.split('\n')[:-1])
+    width = 3
+
+    def _button(service):
+        return InlineKeyboardButton(service.split('_')[1].title(), callback_data=service)
+
+    keyboard = [[_button(service) for service in services[width * row:width * (row + 1)]
+                 ] for row in range(len(services) // width + (1 if len(services) % width else 0))]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
     update.message.reply_markdown('Select service to restart:', reply_markup=reply_markup)
@@ -145,15 +159,13 @@ def restart(bot, update):
 
 def restart_service(bot, update):
     query = update.callback_query
-
     service = query.data
-    result = run(f'docker restart toolset_{service}_1', hide=True, warn=True, pty=False)
-
-    # TODO: Explicitly say if restart succeeded or failed.
-    bot.edit_message_text(
-        text=f'{result.stdout or result.stderr or "No output."}',
-        chat_id=query.message.chat_id,
-        message_id=query.message.message_id)
+    result = run(f'docker restart {service}', hide=True, warn=True, pty=False)
+    if result.stdout:
+        message = f'{service} restarted'
+    else:
+        message = result.stderr or "No output."
+    bot.edit_message_text(text=message, chat_id=query.message.chat_id, message_id=query.message.message_id)
 
 
 def main():
