@@ -38,11 +38,11 @@ except NotConfigured as e:
     raise TelegramError(str(e))
 
 
-def run_and_reply(update, command, reply=True, process_func=None):
+def run_and_reply(update, command, reply=True, process_func=None, pty=False):
     """Initial implementation of message response that support paging if message is too long
 
     """
-    result = run(command, hide=True, warn=True, pty=False)
+    result = run(command, hide=True, warn=True, pty=pty)
     if process_func and result.stdout:
         message = process_func(result.stdout)
         if not reply:
@@ -80,7 +80,7 @@ def start(bot, update):
 
 def invoke(bot, update):
     """Run message as invoke task"""
-    run_and_reply(update, update.message.text[7:])
+    run_and_reply(update, update.message.text[7:], pty=True)
 
 
 def status(bot, update):
