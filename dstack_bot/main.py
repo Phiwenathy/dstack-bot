@@ -133,7 +133,7 @@ def show_backups(bot, update):
         backups = []
         aws_ls = stdout.split('\n')
         for entry in aws_ls[:-1]:
-            match = re.match('.+db_backup\.(?P<date>[\dT-]{19}Z)_(?P<tag>.+)\.tar\.gz$', entry)
+            match = re.match('.+backup_(?P<date>[\dT-]{19}Z)_(?P<tag>.+)\.pg_dump$', entry)
             if match:
                 data = match.groupdict()
                 backups.append(f"{data['date']} - {data['tag']}")
