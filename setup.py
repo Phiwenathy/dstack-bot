@@ -5,7 +5,7 @@ with open('README.rst', 'r') as f:
 
 setup(
     name='dstack-bot',
-    version='1.1.6',
+    version='1.1.7',
     description=(
         'Simple bot that allows you to run commands on your server using invoke'),
     long_description=long_description,
