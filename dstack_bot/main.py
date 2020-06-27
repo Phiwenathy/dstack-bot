@@ -125,6 +125,7 @@ def show_backups(bot, update):
     try:
         bucket = get_env('S3_BUCKET_NAME')
         backup_path = get_env('S3_BACKUP_PATH')
+        endpoint_url = get_env('ENDPOINT_URL')
     except NotConfigured as exception:
         raise TelegramError(str(exception))
 
@@ -140,7 +141,7 @@ def show_backups(bot, update):
         message = '\n'.join(backups[:5])
         return message
 
-    run_and_reply(update, f'aws s3 ls s3://{bucket}{backup_path}', process_func=_process)
+    run_and_reply(update, f'aws --endpoint-url={endpoint_url} s3 ls s3://{bucket}{backup_path}', process_func=_process)
 
 
 def restart(bot, update):
