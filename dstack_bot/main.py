@@ -78,27 +78,27 @@ def start(bot, update):
     """)
 
 
-def invoke(bot, update):
+def invoke(update, context):
     """Run message as invoke task"""
     run_and_reply(update, update.message.text[7:], pty=True)
 
 
-def status(bot, update):
+def status(update, context):
     """Run message as invoke task"""
     run_and_reply(update, "docker ps --format 'table {{.Names}}\t{{.Status}}'")
 
 
-def error(bot, update, error_name):
+def error(update, context):
     """Log Errors caused by Updates."""
-    logger.warning('Update "%s" caused error "%s"', update, error_name)
-    update.message.reply_markdown(f'```bash\n{error_name}\n```')
+    logger.warning('Update "%s" caused error "%s"', update, context.error)
+    update.message.reply_markdown(f'```bash\n{context.error}\n```')
 
 
-def stats(bot, update):
+def stats(update, context):
     update.message.reply_markdown(f'```bash\n{stats_summary()}\n```')
 
 
-def users(bot, update):
+def users(update, context):
     try:
         container_name = get_env('POSTGRES_CONTAINER_NAME')
         postgres_username = get_env('POSTGRES_USERNAME')
@@ -111,17 +111,17 @@ def users(bot, update):
         f"COPY (select {','.join(fields)} from auth_user) to '{path}' (format csv, delimiter ',');"
         '"', hide=True, warn=True, pty=False)
     run(f'docker cp {container_name}:{path} {path}', hide=True, warn=True, pty=False)
-    bot.send_document(chat_id=update.message.chat_id, document=open('/tmp/users.csv', 'rb'))
+    context.bot.send_document(chat_id=update.message.chat_id, document=open('/tmp/users.csv', 'rb'))
 
 
-def backup(bot, update):
+def backup(update, context):
     """Run message as invoke task"""
     tag = get_env('S3_BACKUP_TAG') or update.message.text[7:]
     run_and_reply(update, f'dstack e db backup --tag {tag}')
     cleanup('*.tar.gz')
 
 
-def show_backups(bot, update):
+def show_backups(update, context):
     try:
         bucket = get_env('S3_BUCKET_NAME')
         backup_path = get_env('S3_BACKUP_PATH')
@@ -144,7 +144,7 @@ def show_backups(bot, update):
     run_and_reply(update, f'aws --endpoint-url={endpoint_url} s3 ls s3://{bucket}{backup_path}', process_func=_process)
 
 
-def restart(bot, update):
+def restart(update, context):
     services = run_and_reply(update, "docker ps --format '{{.Names}}'",
                              reply=False, process_func=lambda s: s.split('\n')[:-1])
     width = 3
@@ -159,7 +159,7 @@ def restart(bot, update):
     update.message.reply_markdown('Select service to restart:', reply_markup=reply_markup)
 
 
-def restart_service(bot, update):
+def restart_service(update, context):
     query = update.callback_query
     service = query.data
     result = run(f'docker restart {service}', hide=True, warn=True, pty=False)
@@ -167,7 +167,7 @@ def restart_service(bot, update):
         message = f'{service} restarted'
     else:
         message = result.stderr or "No output."
-    bot.edit_message_text(text=message, chat_id=query.message.chat_id, message_id=query.message.message_id)
+    context.bot.edit_message_text(text=message, chat_id=query.message.chat_id, message_id=query.message.message_id)
 
 
 def main():
